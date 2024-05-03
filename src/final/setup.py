@@ -29,6 +29,8 @@ setup(
     entry_points={
         'console_scripts': [
             'my_node = final.my_node:main',
+            'my_calc_node = final.my_calc_node:main',
+            'pranav_code = final.pranav:main'
         ],
     },
 )
