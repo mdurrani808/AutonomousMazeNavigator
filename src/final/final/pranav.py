@@ -22,7 +22,7 @@ def mean(arr):
 
 class Homework5(Node):
     def __init__(self):
-        super().__init__('hw5_pub')
+        super().__init__('hw35_pub')
 
         self.ranges = []
         self.state = State.STRAIGHT
