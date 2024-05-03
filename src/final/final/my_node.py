@@ -31,11 +31,13 @@ class Homework5(Node):
         self.tolerance = 0.005
         self.parallelizing_error = 0
         self.max_parallelizing_effort = 1.0
-        self.straight_after_right_time = 5.0
-        
+        self.straight_after_right_time = 3.5
+        self.left_counter = 0
+        self.right_counter = 0
+        self.wall_parallelize = ""
         # !----- MODULAR VALUES -----! #
         self.FRONT_WALL_DIST = .5
-        self.RIGHT_WALL_DIST = .55
+        self.RIGHT_WALL_DIST = .475
         self.LONG_RIGHT_WALL_DIST = .75
         self.FRONT = 0
         self.LEFT = 90
@@ -50,12 +52,21 @@ class Homework5(Node):
         
     def has_right(self, right_dist, top_right_dist, bottom_right_dist):
         return right_dist < self.RIGHT_WALL_DIST or bottom_right_dist < self.LONG_RIGHT_WALL_DIST
-    
+    def has_left(self, left_dist, top_left_dist, bottom_left_dist):
+        return left_dist < self.RIGHT_WALL_DIST or bottom_left_dist < self.LONG_RIGHT_WALL_DIST
     def has_front(self, front_dist):
         return front_dist < self.FRONT_WALL_DIST
     
-    def is_parallel(self, topRightRange, bottomRightRange, middleRightRange):
-        return abs(topRightRange - bottomRightRange) < self.parallelBuffer and middleRightRange <= min(topRightRange, bottomRightRange)
+    def is_parallel(self, topRightRange, bottomRightRange, middleRightRange, topLeftRange, bottomLeftRange, middleLeftRange):
+        if(abs(topRightRange - bottomRightRange) < abs(topLeftRange - bottomLeftRange) and self.wall_parallelize == ""):
+            self.wall_parallelize = "Right"
+        elif(abs(topRightRange - bottomRightRange) > abs(topLeftRange - bottomLeftRange) and self.wall_parallelize == ""):
+            self.wall_parallelize = "Left"
+        if(abs(topRightRange - bottomRightRange) < self.parallelBuffer and middleRightRange <= min(topRightRange, bottomRightRange)): 
+            return True
+        elif(abs(topLeftRange - bottomLeftRange) < self.parallelBuffer and middleLeftRange <= min(topLeftRange, bottomLeftRange)):
+            return True
+        return False
     
     def mean(self, arr):
         return sum(arr) / len(arr)
@@ -71,11 +82,17 @@ class Homework5(Node):
         middleRightRanges = rangesArr[265:275]
         bottomRightRanges = rangesArr[280:290]
         megaTopRightRanges = rangesArr[240:250]
+        topLeftRanges = rangesArr[100:110]
+        middleLeftRanges = rangesArr[85:95]
+        bottomLeftRanges = rangesArr[70:80]
 
         middleRange = self.mean(middleRanges)
         topRightRange = self.mean(topRightRanges)
         middleRightRange = self.mean(middleRightRanges)
         bottomRightRange = self.mean(bottomRightRanges)
+        topLeftRange = self.mean(topLeftRanges)
+        middleLeftRange = self.mean(middleLeftRanges)
+        bottomLeftRange = self.mean(bottomLeftRanges)
         megaTopRightRange = self.mean(megaTopRightRanges)
 
         if self.has_started:
@@ -86,38 +103,63 @@ class Homework5(Node):
                 print("topRight: " + str(topRightRange))
                 print("bottomRight: " + str(bottomRightRange))
                 print("top-bottom right: " + str(abs(topRightRange - bottomRightRange)))
-
-                if self.is_parallel(topRightRange, bottomRightRange, middleRightRange):
+                if(self.wall_parallelize == "Right"):
+                    self.parallelizing_error = topRightRange - bottomRightRange
+                else:
+                    self.parallelizing_error = topLeftRange - bottomLeftRange
+                if self.is_parallel(topRightRange, bottomRightRange, middleRightRange, topLeftRange, bottomLeftRange, middleLeftRange):
                     self.state = State.STRAIGHT
-                    self.get_logger().info(f"Transitioning from {self.last_state} to {self.state}")
+                    self.wall_parallelize = ""
+                    self.get_logger().info(f"Transitioning from {self.last_state} to {self.state} because parallel")
             
             elif self.state == State.STRAIGHT_AFTER_RIGHT:
                 if self.elapsed_time >= self.straight_after_right_time:
                     self.state = State.STRAIGHT
-                    self.get_logger().info(f"Transitioning from {self.last_state} to {self.state}")
+                    self.get_logger().info(f"Transitioning from {self.last_state} to {self.state} because we went straight after a right")
                         
             elif not self.turn_switch and not self.has_right(right, top_right, megaTopRightRange):
-                self.state = State.TURNING_RIGHT
-                self.last_turn_state = State.TURNING_RIGHT
-                self.get_logger().info(f"Transitioning from {self.last_state} to {self.state}")
+                if(not self.has_left(middleLeftRange, topLeftRange, bottomLeftRange)):
+                    self.state = State.TURNING_LEFT
+                    self.last_turn_state = State.TURNING_LEFT
+                    self.left_counter += 1
+                    self.right_counter = 0
+                    if(self.left_counter > 4):
+                        self.state = State.TURNING_RIGHT
+                        self.last_turn_state = State.TURNING_RIGHT
+                else:
+                    self.state = State.TURNING_RIGHT
+                    self.last_turn_state = State.TURNING_RIGHT
+                    self.right_counter += 1
+                    self.left_counter = 0
+                    if(self.right_counter > 4):
+                        self.state = State.TURNING_LEFT
+                        self.last_turn_state = State.TURNING_LEFT
+                self.get_logger().info(f"Transitioning from {self.last_state} to {self.state} because there was nothing on our right/left")
             
             elif not self.turn_switch and (self.has_right(right, top_right, bottomRightRange) and not self.has_front(front)):
                 self.state = State.STRAIGHT
-                self.get_logger().info(f"Transitioning from {self.last_state} to {self.state}")
+                self.get_logger().info(f"Transitioning from {self.last_state} to {self.state} bcs there was something on the right but not front")
             
-            elif not self.turn_switch and self.has_right(right, top_right, bottomRightRange) and self.has_front(front):
+            elif not self.turn_switch and ((self.has_right(right, top_right, bottomRightRange) and self.has_front(front))):
                 self.state = State.TURNING_LEFT
                 self.last_turn_state = State.TURNING_LEFT
-                self.get_logger().info(f"Transitioning from {self.last_state} to {self.state}")
+                self.left_counter += 1
+                self.right_counter = 0
+                if(self.left_counter > 4):
+                    self.state = State.TURNING_RIGHT
+                    self.last_turn_state = State.TURNING_RIGHT
+                self.get_logger().info(f"Transitioning from {self.last_state} to {self.state} there was right and front ")
             
             if math.isinf(left) and math.isinf(right):
                 self.state = State.SPINNING
-                self.get_logger().info(f"Transitioning from {self.last_state} to {self.state}")
+                self.get_logger().info(f"Transitioning from {self.last_state} to {self.state} because we're done")
         else:
             if self.has_front(front):
                 self.has_started = True
                 self.get_logger().info("Rover has started")
-            self.state = State.STRAIGHT
+                self.state = State.STRAIGHT
+                self.last_state = State.STRAIGHT
+                #self.last_turn_state = State.TURNING_LEFT
             self.get_logger().info(f"Transitioning from {self.last_state} to {self.state}")
             
    
@@ -151,7 +193,7 @@ class Homework5(Node):
             msg.angular.z = 0.0
         elif self.state == State.PARALLELIZING:
             parallelizing_effort = self.parallelizing_error / self.tolerance
-            msg.angular.z = (ANGULAR) * self.sign(parallelizing_effort) * -1
+            msg.angular.z = (ANGULAR) * self.sign(parallelizing_effort)
         elif self.state == State.STRAIGHT_AFTER_RIGHT:
             msg.linear.x = LINEAR
         elif self.state == State.SPINNING:
