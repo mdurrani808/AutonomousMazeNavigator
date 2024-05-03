@@ -12,7 +12,8 @@ class State(Enum):
     TURNING_LEFT: int = 2,
     TURNING_RIGHT: int = 3,
     PARALLELIZING: int = 4,
-    STRAIGHT_AFTER_RIGHT: int = 5
+    STRAIGHT_AFTER_RIGHT: int = 5,
+    SPINNING: int = 6
 
 class Homework5(Node):
     def __init__(self):
@@ -24,13 +25,13 @@ class Homework5(Node):
         self.elapsed_time = 0
         self.last_time = 0
         self.turn_switch = False
-        self.desired_turn_time = 25
+        self.desired_turn_time = 30.0
         self.has_started = False
         self.parallelizing_time = 2.0
         self.tolerance = 0.005
         self.parallelizing_error = 0
         self.max_parallelizing_effort = 1.0
-        self.straight_after_right_time = 3.0
+        self.straight_after_right_time = 5.0
         
         # !----- MODULAR VALUES -----! #
         self.FRONT_WALL_DIST = .5
@@ -40,7 +41,7 @@ class Homework5(Node):
         self.LEFT = 90
         self.RIGHT = 270
         self.THETA = 10
-        self.parallelBuffer = 0.005
+        self.parallelBuffer = 0.015
         # !--------------------------! #
         
         self.publisher = self.create_publisher(Twist, "/cmd_vel", 100)
@@ -69,7 +70,7 @@ class Homework5(Node):
         topRightRanges = rangesArr[250:260]
         middleRightRanges = rangesArr[265:275]
         bottomRightRanges = rangesArr[280:290]
-        megaTopRightRanges = rangesArr[225:235]
+        megaTopRightRanges = rangesArr[240:250]
 
         middleRange = self.mean(middleRanges)
         topRightRange = self.mean(topRightRanges)
@@ -78,6 +79,9 @@ class Homework5(Node):
         megaTopRightRange = self.mean(megaTopRightRanges)
 
         if self.has_started:
+            if self.state == State.SPINNING:
+                return
+            
             if self.state == State.PARALLELIZING:
                 print("topRight: " + str(topRightRange))
                 print("bottomRight: " + str(bottomRightRange))
@@ -104,6 +108,10 @@ class Homework5(Node):
             elif not self.turn_switch and self.has_right(right, top_right, bottomRightRange) and self.has_front(front):
                 self.state = State.TURNING_LEFT
                 self.last_turn_state = State.TURNING_LEFT
+                self.get_logger().info(f"Transitioning from {self.last_state} to {self.state}")
+            
+            if math.isinf(left) and math.isinf(right):
+                self.state = State.SPINNING
                 self.get_logger().info(f"Transitioning from {self.last_state} to {self.state}")
         else:
             if self.has_front(front):
@@ -143,9 +151,11 @@ class Homework5(Node):
             msg.angular.z = 0.0
         elif self.state == State.PARALLELIZING:
             parallelizing_effort = self.parallelizing_error / self.tolerance
-            msg.angular.z = (ANGULAR) * self.sign(parallelizing_effort)
+            msg.angular.z = (ANGULAR) * self.sign(parallelizing_effort) * -1
         elif self.state == State.STRAIGHT_AFTER_RIGHT:
             msg.linear.x = LINEAR
+        elif self.state == State.SPINNING:
+            msg.angular.z = ANGULAR
         
         self.publisher.publish(msg)
         
