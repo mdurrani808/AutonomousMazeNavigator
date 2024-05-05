@@ -36,7 +36,7 @@ class Homework5(Node):
         self.right_counter = 0
         self.wall_parallelize = ""
         # !----- MODULAR VALUES -----! #
-        self.FRONT_WALL_DIST = .5
+        self.FRONT_WALL_DIST = .55
         self.RIGHT_WALL_DIST = .475
         self.LONG_RIGHT_WALL_DIST = .75
         self.FRONT = 0

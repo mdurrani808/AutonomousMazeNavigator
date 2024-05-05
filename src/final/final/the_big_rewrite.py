@@ -43,7 +43,7 @@ class WallFollowerVFinal(Node):
             self.right_back = 240
             
             # This sets the distance we use to check whether or not there is "something" within that range
-            self.min_front_dist = .5
+            self.min_front_dist = .55
             self.min_right_orth_dist = .6
             self.min_right_front_dist = .6
             self.min_right_back_dist = 1.05
@@ -67,6 +67,7 @@ class WallFollowerVFinal(Node):
 
         self.state = None
         self.last_state = None
+        self.last_turn_state = None
         
         # Logging
         self.var_has_front = False
@@ -122,13 +123,13 @@ class WallFollowerVFinal(Node):
                 self.elapsed_time = 0
                 # if we are parallelizing, calculate the error and then check if we are done yet.
                 if self.state == TestingStates.PARALLELIZE:
-                    if(self.wall_parallelize == "Right"):
+                    if(self.last_turn_state == TestingStates.TURN_LEFT):
                         self.parallelizing_error = right_front_parallel-right_back_parallel
                         
                     else:
                         self.parallelizing_error = left_back_parallel-left_front_parallel
                     self.print(str(self.parallelizing_error))
-                    if self.is_parallel(right_front_parallel, right_back_parallel, right_orth_parallel, left_front_parallel, left_back_parallel, left_orth_parallel):
+                    if abs(self.parallelizing_error) < self.parallelBuffer:
                         self.state = TestingStates.STRAIGHT
                         self.wall_parallelize = ""
                         self.get_logger().info(f"Transitioning from {self.last_state} to {self.state} because parallel")
@@ -136,6 +137,7 @@ class WallFollowerVFinal(Node):
                 # this means are are at a corner, we need to turn left to follow the wall
                 elif(self.var_has_front and self.var_has_right_orth):
                     self.state = TestingStates.TURN_LEFT
+                    self.last_turn_state = TestingStates.TURN_LEFT
                     
                 # We just need to continue against a wall if the wall does exist. 
                 elif((not self.var_has_front and not self.var_has_right_back) or (not self.var_has_front and self.var_has_right_front) or (not self.var_has_front and self.var_has_right_orth)):    
@@ -144,22 +146,24 @@ class WallFollowerVFinal(Node):
                 # if there is soemthing in the right back (we have passed a wall) and nothing in the front, we need to turn right to follow the outside corner
                 elif(self.var_has_right_back and not (self.var_has_front or self.var_has_right_front) and self.curr_right_orth_dist > self.curr_right_back_dist and self.curr_right_back_dist > .5):
                     self.state = TestingStates.TURN_RIGHT
-                
+                    self.last_turn_state = TestingStates.TURN_RIGHT
                 # something went wrong and we don't know what state we are in!
                 else:
                     
                     # fuck it, why not go right?
                     if(not self.var_has_right_back and not self.var_has_front and not self.var_has_right_front and not self.var_has_right_orth):
                         self.state = TestingStates.TURN_RIGHT
-                    
+                        self.last_turn_state = TestingStates.TURN_RIGHT
                     # brother is cooked
                     else:
-                        self.state = self.last_state
-        else:
+                        self.state = TestingStates.TURN_RIGHT
+                        self.last_turn_state = TestingStates.TURN_RIGHT
+        else:           
             if self.has_front():
                 self.has_started = True
                 self.state = TestingStates.TURN_LEFT
                 self.last_state = TestingStates.STRAIGHT
+                self.last_turn_state = TestingStates.TURN_LEFT
     
     def timer_callback(self):
         LINEAR = .5
@@ -264,11 +268,12 @@ class WallFollowerVFinal(Node):
             self.wall_parallelize = "Right"
         elif(abs(topRightRange - bottomRightRange) > abs(topLeftRange - bottomLeftRange) and self.wall_parallelize == ""):
             self.wall_parallelize = "Left"
-        if(abs(topRightRange - bottomRightRange) < self.parallelBuffer and middleRightRange <= min(topRightRange, bottomRightRange)): 
-            return True
-
-        if(abs(topLeftRange - bottomLeftRange) < self.parallelBuffer and middleLeftRange <= min(topLeftRange, bottomLeftRange)):
-            return True
+        if self.wall_parallelize == "Right":
+            if(abs(topRightRange - bottomRightRange) < self.parallelBuffer and middleRightRange <= min(topRightRange, bottomRightRange)): 
+                return True
+        else:
+            if(abs(topLeftRange - bottomLeftRange) < self.parallelBuffer and middleLeftRange <= min(topLeftRange, bottomLeftRange)):
+                return True
         return False
     
     
