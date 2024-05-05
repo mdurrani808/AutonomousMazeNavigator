@@ -28,10 +28,10 @@ class WallFollowerVFinal(Node):
         self.has_started = False # starting is defined as seeing our first wall in front of us. 
         #sets the 1/2 the angle we use to calculate a certain distance (ex. theta = 10 means we will use the average of a 20 degree range to calculate the angle)
         self.theta = int(10)
-        self.desired_turn_time = 27.5
+        self.desired_turn_time = 10
         self.parallelizing_error = 0.0
         self.wall_parallelize = ""
-        self.parallelBuffer = 0.05
+        self.parallelBuffer = 0.010
         
         self.elapsed_time = 0.0
         self.last_time = 0.0
@@ -44,8 +44,8 @@ class WallFollowerVFinal(Node):
             
             # This sets the distance we use to check whether or not there is "something" within that range
             self.min_front_dist = .5
-            self.min_right_orth_dist = .5
-            self.min_right_front_dist = .5
+            self.min_right_orth_dist = .6
+            self.min_right_front_dist = .6
             self.min_right_back_dist = 1.05
         else:
             self.front = 0
@@ -124,8 +124,10 @@ class WallFollowerVFinal(Node):
                 if self.state == TestingStates.PARALLELIZE:
                     if(self.wall_parallelize == "Right"):
                         self.parallelizing_error = right_front_parallel-right_back_parallel
+                        
                     else:
                         self.parallelizing_error = left_back_parallel-left_front_parallel
+                    self.print(str(self.parallelizing_error))
                     if self.is_parallel(right_front_parallel, right_back_parallel, right_orth_parallel, left_front_parallel, left_back_parallel, left_orth_parallel):
                         self.state = TestingStates.STRAIGHT
                         self.wall_parallelize = ""
@@ -160,8 +162,8 @@ class WallFollowerVFinal(Node):
                 self.last_state = TestingStates.STRAIGHT
     
     def timer_callback(self):
-        LINEAR = .25
-        ANGULAR = .1
+        LINEAR = .5
+        ANGULAR = .25
         msg = Twist()
         
         # print logging messages on every state transition or variable change
@@ -205,7 +207,6 @@ class WallFollowerVFinal(Node):
         if self.last_state == TestingStates.STRAIGHT and (self.state == TestingStates.TURN_LEFT or self.state == TestingStates.TURN_RIGHT):
             self.elapsed_time = 0
             self.print("START TUNRINGGG")
-        self.print(str(self.elapsed_time))
         if (self.state == TestingStates.TURN_LEFT or self.state == TestingStates.TURN_RIGHT) and self.elapsed_time >= self.desired_turn_time:
             self.state = TestingStates.PARALLELIZE
             self.print("PARALLELIZINGGGGGGGGGGG")
@@ -217,7 +218,7 @@ class WallFollowerVFinal(Node):
             msg.angular.z = -ANGULAR
         elif self.state == TestingStates.PARALLELIZE:
             
-            msg.angular.z = (ANGULAR) * .75 * self.sign(self.parallelizing_error)
+            msg.angular.z = .075 * self.sign(self.parallelizing_error)
 
         self.publisher.publish(msg)
         if(self.has_started):
@@ -225,7 +226,6 @@ class WallFollowerVFinal(Node):
             
             curr_time = curr_time[0] + curr_time[1] / 1000000000.0
             if(curr_time - self.last_time < 1):
-                self.print("Adding "+str(curr_time - self.last_time))
                 self.elapsed_time += curr_time - self.last_time
             self.last_time = curr_time
         self.last_state = self.state
@@ -262,12 +262,13 @@ class WallFollowerVFinal(Node):
     def is_parallel(self, topRightRange, bottomRightRange, middleRightRange, topLeftRange, bottomLeftRange, middleLeftRange):
         if(abs(topRightRange - bottomRightRange) < abs(topLeftRange - bottomLeftRange) and self.wall_parallelize == ""):
             self.wall_parallelize = "Right"
-            if(abs(topRightRange - bottomRightRange) < self.parallelBuffer and middleRightRange <= min(topRightRange, bottomRightRange)): 
-                return True
         elif(abs(topRightRange - bottomRightRange) > abs(topLeftRange - bottomLeftRange) and self.wall_parallelize == ""):
             self.wall_parallelize = "Left"
-            if(abs(topLeftRange - bottomLeftRange) < self.parallelBuffer and middleLeftRange <= min(topLeftRange, bottomLeftRange)):
-                return True
+        if(abs(topRightRange - bottomRightRange) < self.parallelBuffer and middleRightRange <= min(topRightRange, bottomRightRange)): 
+            return True
+
+        if(abs(topLeftRange - bottomLeftRange) < self.parallelBuffer and middleLeftRange <= min(topLeftRange, bottomLeftRange)):
+            return True
         return False
     
     

@@ -25,7 +25,7 @@ class Homework5(Node):
         self.elapsed_time = 0
         self.last_time = 0
         self.turn_switch = False
-        self.desired_turn_time = 30.0
+        self.desired_turn_time = 15
         self.has_started = False
         self.parallelizing_time = 2.0
         self.tolerance = 0.005
@@ -165,7 +165,7 @@ class Homework5(Node):
    
     def timer_callback(self):
         LINEAR = .25
-        ANGULAR = .1
+        ANGULAR = 2.0
         msg = Twist()
         
         if self.last_state == State.STRAIGHT and (self.state == State.TURNING_LEFT or self.state == State.TURNING_RIGHT):
