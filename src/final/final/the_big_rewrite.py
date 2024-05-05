@@ -23,6 +23,7 @@ class WallFollowerVFinal(Node):
         
         
         self.gazebo = True
+        self.tuning = False
         self.enable_logging = True
         self.got_first_message = False
         self.has_started = False # starting is defined as seeing our first wall in front of us. 
@@ -205,39 +206,41 @@ class WallFollowerVFinal(Node):
                 self.print_has_side()
                 self.last_has_right_back = self.var_has_right_back
         
+        # if we are tuning our state transitions (ex. with the teleop key) we don't want it to be moving on its own
+        if(not self.tuning):
         #if the state just changed to turning, start the timer
-        if self.last_state == States.STRAIGHT and (self.state == States.TURN_LEFT or self.state == States.TURN_RIGHT):
-            self.elapsed_time = 0
-            self.print("START TUNRING")
-        
-        # if the are turning and the timer has passed, start parallelizing
-        if (self.state == States.TURN_LEFT or self.state == States.TURN_RIGHT) and self.elapsed_time >= self.desired_turn_time:
-            self.state = States.PARALLELIZE
-            self.print("PARALLELIZING")
-        
-        # go straight at the start or if we state is straight, go straight
-        if not self.has_started or self.state == States.STRAIGHT:
-            msg.linear.x = LINEAR
-        elif self.state == States.TURN_LEFT:
-            msg.angular.z = ANGULAR
-        elif self.state == States.TURN_RIGHT:
-            msg.angular.z = -ANGULAR
-        elif self.state == States.PARALLELIZE:
-            msg.angular.z = self.parallel_angular * self.sign(self.parallelizing_error)
+            if self.last_state == States.STRAIGHT and (self.state == States.TURN_LEFT or self.state == States.TURN_RIGHT):
+                self.elapsed_time = 0
+                self.print("START TUNRING")
+            
+            # if the are turning and the timer has passed, start parallelizing
+            if (self.state == States.TURN_LEFT or self.state == States.TURN_RIGHT) and self.elapsed_time >= self.desired_turn_time:
+                self.state = States.PARALLELIZE
+                self.print("PARALLELIZING")
+            
+            # go straight at the start or if we state is straight, go straight
+            if not self.has_started or self.state == States.STRAIGHT:
+                msg.linear.x = LINEAR
+            elif self.state == States.TURN_LEFT:
+                msg.angular.z = ANGULAR
+            elif self.state == States.TURN_RIGHT:
+                msg.angular.z = -ANGULAR
+            elif self.state == States.PARALLELIZE:
+                msg.angular.z = self.parallel_angular * self.sign(self.parallelizing_error)
 
-        self.publisher.publish(msg)
-        
-        # onlt start the timer once the rover has started the maze
-        if(self.has_started):
-            curr_time = self.get_clock().now().seconds_nanoseconds()
+            self.publisher.publish(msg)
             
-            curr_time = curr_time[0] + curr_time[1] / 1000000000.0
-            
-            # sometimes we get a really large value out of this, not sure why
-            if(curr_time - self.last_time < 1):
-                self.elapsed_time += curr_time - self.last_time
-            self.last_time = curr_time
-        self.last_state = self.state
+            # onlt start the timer once the rover has started the maze
+            if(self.has_started):
+                curr_time = self.get_clock().now().seconds_nanoseconds()
+                
+                curr_time = curr_time[0] + curr_time[1] / 1000000000.0
+                
+                # sometimes we get a really large value out of this, not sure why
+                if(curr_time - self.last_time < 1):
+                    self.elapsed_time += curr_time - self.last_time
+                self.last_time = curr_time
+            self.last_state = self.state
             
     def sign(self,num):
         return -1 if num < 0 else 1
