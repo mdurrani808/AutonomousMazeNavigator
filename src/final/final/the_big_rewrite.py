@@ -6,7 +6,7 @@ from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 import math
 
-class TestingStates(Enum):
+class States(Enum):
     TURN_RIGHT: int = 1,
     STRAIGHT: int = 2,
     TURN_LEFT: int = 3,
@@ -30,8 +30,8 @@ class WallFollowerVFinal(Node):
         self.theta = int(10)
         self.desired_turn_time = 10
         self.parallelizing_error = 0.0
-        self.wall_parallelize = ""
         self.parallelBuffer = 0.010
+        
         
         self.elapsed_time = 0.0
         self.last_time = 0.0
@@ -40,24 +40,48 @@ class WallFollowerVFinal(Node):
             self.front = 0
             self.right_orth = 270
             self.right_front = 315
-            self.right_back = 240
+            self.right_back = 245
+            
+            # angles used while parallelizing
+            self.right_front_parallel_angle = 255
+            self.right_back_parallel_angle = 285
+            
+            self.left_front_parallel_angle = 105
+            self.left_back_parallel_angle = 75
+            self.parallel_theta = 5.0
             
             # This sets the distance we use to check whether or not there is "something" within that range
             self.min_front_dist = .55
             self.min_right_orth_dist = .6
             self.min_right_front_dist = .6
             self.min_right_back_dist = 1.05
+            
+            self.linear = .5
+            self.angular = .25
+            self.parallel_angular = .075
         else:
             self.front = 0
             self.right_orth = 270
             self.right_front = 315
-            self.right_back = 225
+            self.right_back = 245
+            
+            # angles used while parallelizing
+            self.right_front_parallel_angle = 255
+            self.right_back_parallel_angle = 285
+            
+            self.left_front_parallel_angle = 105
+            self.left_back_parallel_angle = 75
+            self.parallel_theta = 5.0
             
             # This sets the distance we use to check whether or not there is "something" within that range
-            self.min_front_dist = .5
-            self.min_right_orth_dist = .5
-            self.min_right_front_dist = .5
+            self.min_front_dist = .55
+            self.min_right_orth_dist = .6
+            self.min_right_front_dist = .6
             self.min_right_back_dist = 1.05
+            
+            self.linear = .5
+            self.angular = .25
+            self.parallel_angular = .075
 
         # stores the relevant current distances that are computed whenever we get a new scan_message from the lidar.
         self.curr_front_dist = 0.0
@@ -87,15 +111,13 @@ class WallFollowerVFinal(Node):
         self.curr_front_dist = lidar_data[0]
         self.curr_right_orth_dist = self.mean(lidar_data[self.right_orth - self.theta : self.right_orth + self.theta])
         self.curr_right_front_dist = self.mean(lidar_data[self.right_front - self.theta : self.right_front + self.theta])
-        self.curr_right_back_dist = self.mean(lidar_data[self.right_back - self.theta + 5 : self.right_back + self.theta +5])
+        self.curr_right_back_dist = self.mean(lidar_data[self.right_back - self.theta : self.right_back + self.theta])
         
         # this data is only used when parallelizing after turning
         right_front_parallel = self.mean(lidar_data[250:260])
-        right_orth_parallel = self.mean(lidar_data[265:275])
         right_back_parallel = self.mean(lidar_data[280:290])
         
         left_front_parallel = self.mean(lidar_data[100:110])
-        left_orth_parallel = self.mean(lidar_data[85:95])
         left_back_parallel = self.mean(lidar_data[70:80])
         
         
@@ -119,55 +141,50 @@ class WallFollowerVFinal(Node):
         self.var_has_right_back = self.has_right_back()
         if self.has_started:
             
-            if(self.state != TestingStates.TURN_LEFT and self.state != TestingStates.TURN_RIGHT):
+            if(self.state != States.TURN_LEFT and self.state != States.TURN_RIGHT):
                 self.elapsed_time = 0
                 # if we are parallelizing, calculate the error and then check if we are done yet.
-                if self.state == TestingStates.PARALLELIZE:
-                    if(self.last_turn_state == TestingStates.TURN_LEFT):
+                if self.state == States.PARALLELIZE:
+                    
+                    # if we just turned left, we parallelize off the right wall.
+                    if(self.last_turn_state == States.TURN_LEFT):
                         self.parallelizing_error = right_front_parallel-right_back_parallel
-                        
+                    
+                    # otherwise, use the left wall (the order is flipped so the sign matches that of the right error as needed)
                     else:
                         self.parallelizing_error = left_back_parallel-left_front_parallel
                     self.print(str(self.parallelizing_error))
                     if abs(self.parallelizing_error) < self.parallelBuffer:
-                        self.state = TestingStates.STRAIGHT
-                        self.wall_parallelize = ""
+                        self.state = States.STRAIGHT
                         self.get_logger().info(f"Transitioning from {self.last_state} to {self.state} because parallel")
                 
                 # this means are are at a corner, we need to turn left to follow the wall
                 elif(self.var_has_front and self.var_has_right_orth):
-                    self.state = TestingStates.TURN_LEFT
-                    self.last_turn_state = TestingStates.TURN_LEFT
+                    self.state = States.TURN_LEFT
+                    self.last_turn_state = States.TURN_LEFT
                     
                 # We just need to continue against a wall if the wall does exist. 
                 elif((not self.var_has_front and not self.var_has_right_back) or (not self.var_has_front and self.var_has_right_front) or (not self.var_has_front and self.var_has_right_orth)):    
-                    self.state = TestingStates.STRAIGHT
+                    self.state = States.STRAIGHT
                     
                 # if there is soemthing in the right back (we have passed a wall) and nothing in the front, we need to turn right to follow the outside corner
                 elif(self.var_has_right_back and not (self.var_has_front or self.var_has_right_front) and self.curr_right_orth_dist > self.curr_right_back_dist and self.curr_right_back_dist > .5):
-                    self.state = TestingStates.TURN_RIGHT
-                    self.last_turn_state = TestingStates.TURN_RIGHT
-                # something went wrong and we don't know what state we are in!
+                    self.state = States.TURN_RIGHT
+                    self.last_turn_state = States.TURN_RIGHT
+                # something went wrong and we don't know what state we are in! fuck it go right
                 else:
-                    
-                    # fuck it, why not go right?
-                    if(not self.var_has_right_back and not self.var_has_front and not self.var_has_right_front and not self.var_has_right_orth):
-                        self.state = TestingStates.TURN_RIGHT
-                        self.last_turn_state = TestingStates.TURN_RIGHT
-                    # brother is cooked
-                    else:
-                        self.state = TestingStates.TURN_RIGHT
-                        self.last_turn_state = TestingStates.TURN_RIGHT
+                    self.state = States.TURN_RIGHT
+                    self.last_turn_state = States.TURN_RIGHT
         else:           
             if self.has_front():
                 self.has_started = True
-                self.state = TestingStates.TURN_LEFT
-                self.last_state = TestingStates.STRAIGHT
-                self.last_turn_state = TestingStates.TURN_LEFT
+                self.state = States.TURN_LEFT
+                self.last_state = States.STRAIGHT
+                self.last_turn_state = States.TURN_LEFT
     
     def timer_callback(self):
-        LINEAR = .5
-        ANGULAR = .25
+        LINEAR = self.linear
+        ANGULAR = self.angular
         msg = Twist()
         
         # print logging messages on every state transition or variable change
@@ -175,60 +192,48 @@ class WallFollowerVFinal(Node):
             if(self.last_state != self.state):
                 self.print(f"{self.last_state} to {self.state}")
                 self.last_state = self.state
-                
             if(self.last_has_front != self.var_has_front):
-                self.print(f"Has Front: {str(self.has_front())} and {str(self.curr_front_dist)}")
-                self.print(f"Has Right Orth: {str(self.has_right_orth())} and {str(self.curr_right_orth_dist)}")
-                self.print(f"Has Right Front: {str(self.has_right_front())} and {str(self.curr_right_front_dist)}")
-                self.print(f"Has Right Back: {str(self.has_right_back())} and {str(self.curr_right_back_dist)}")
-                self.print(f"--------------------")
+                self.print_has_side()
                 self.last_has_front = self.var_has_front
-                
             if(self.last_has_right_orth != self.var_has_right_orth):
-                self.print(f"Has Front: {str(self.has_front())} and {str(self.curr_front_dist)}")
-                self.print(f"Has Right Orth: {str(self.has_right_orth())} and {str(self.curr_right_orth_dist)}")
-                self.print(f"Has Right Front: {str(self.has_right_front())} and {str(self.curr_right_front_dist)}")
-                self.print(f"Has Right Back: {str(self.has_right_back())} and {str(self.curr_right_back_dist)}")
-                self.print(f"--------------------")
+                self.print_has_side()
                 self.last_has_right_orth = self.var_has_right_orth
-                
             if(self.last_has_right_front != self.var_has_right_front):
-                self.print(f"Has Front: {str(self.has_front())} and {str(self.curr_front_dist)}")
-                self.print(f"Has Right Orth: {str(self.has_right_orth())} and {str(self.curr_right_orth_dist)}")
-                self.print(f"Has Right Front: {str(self.has_right_front())} and {str(self.curr_right_front_dist)}")
-                self.print(f"Has Right Back: {str(self.has_right_back())} and {str(self.curr_right_back_dist)}")
-                self.print(f"--------------------")
+                self.print_has_side()
                 self.last_has_right_front = self.var_has_right_front
-                
             if(self.last_has_right_back != self.var_has_right_back):
-                self.print(f"Has Front: {str(self.has_front())} and {str(self.curr_front_dist)}")
-                self.print(f"Has Right Orth: {str(self.has_right_orth())} and {str(self.curr_right_orth_dist)}")
-                self.print(f"Has Right Front: {str(self.has_right_front())} and {str(self.curr_right_front_dist)}")
-                self.print(f"Has Right Back: {str(self.has_right_back())} and {str(self.curr_right_back_dist)}")
-                self.print(f"--------------------")
+                self.print_has_side()
                 self.last_has_right_back = self.var_has_right_back
         
-        if self.last_state == TestingStates.STRAIGHT and (self.state == TestingStates.TURN_LEFT or self.state == TestingStates.TURN_RIGHT):
+        #if the state just changed to turning, start the timer
+        if self.last_state == States.STRAIGHT and (self.state == States.TURN_LEFT or self.state == States.TURN_RIGHT):
             self.elapsed_time = 0
-            self.print("START TUNRINGGG")
-        if (self.state == TestingStates.TURN_LEFT or self.state == TestingStates.TURN_RIGHT) and self.elapsed_time >= self.desired_turn_time:
-            self.state = TestingStates.PARALLELIZE
-            self.print("PARALLELIZINGGGGGGGGGGG")
-        if not self.has_started or self.state == TestingStates.STRAIGHT:
+            self.print("START TUNRING")
+        
+        # if the are turning and the timer has passed, start parallelizing
+        if (self.state == States.TURN_LEFT or self.state == States.TURN_RIGHT) and self.elapsed_time >= self.desired_turn_time:
+            self.state = States.PARALLELIZE
+            self.print("PARALLELIZING")
+        
+        # go straight at the start or if we state is straight, go straight
+        if not self.has_started or self.state == States.STRAIGHT:
             msg.linear.x = LINEAR
-        elif self.state == TestingStates.TURN_LEFT:
+        elif self.state == States.TURN_LEFT:
             msg.angular.z = ANGULAR
-        elif self.state == TestingStates.TURN_RIGHT:
+        elif self.state == States.TURN_RIGHT:
             msg.angular.z = -ANGULAR
-        elif self.state == TestingStates.PARALLELIZE:
-            
-            msg.angular.z = .075 * self.sign(self.parallelizing_error)
+        elif self.state == States.PARALLELIZE:
+            msg.angular.z = self.parallel_angular * self.sign(self.parallelizing_error)
 
         self.publisher.publish(msg)
+        
+        # onlt start the timer once the rover has started the maze
         if(self.has_started):
             curr_time = self.get_clock().now().seconds_nanoseconds()
             
             curr_time = curr_time[0] + curr_time[1] / 1000000000.0
+            
+            # sometimes we get a really large value out of this, not sure why
             if(curr_time - self.last_time < 1):
                 self.elapsed_time += curr_time - self.last_time
             self.last_time = curr_time
@@ -254,6 +259,14 @@ class WallFollowerVFinal(Node):
     def print(self, string):
         self.get_logger().info(string)
         
+    
+    def print_has_side(self):
+        self.print(f"Has Front: {str(self.has_front())} and {str(self.curr_front_dist)}")
+        self.print(f"Has Right Orth: {str(self.has_right_orth())} and {str(self.curr_right_orth_dist)}")
+        self.print(f"Has Right Front: {str(self.has_right_front())} and {str(self.curr_right_front_dist)}")
+        self.print(f"Has Right Back: {str(self.has_right_back())} and {str(self.curr_right_back_dist)}")
+        self.print(f"--------------------")
+        
     # mean function that accounts for infinite values (which is returned when there is nothing in the detected range of the lidar.)
     def mean(self, arr):
         arr = [i for i in arr if i != math.inf]
@@ -261,20 +274,6 @@ class WallFollowerVFinal(Node):
             return sum(arr) / len(arr)
         else:
             return math.inf
-        
-        
-    def is_parallel(self, topRightRange, bottomRightRange, middleRightRange, topLeftRange, bottomLeftRange, middleLeftRange):
-        if(abs(topRightRange - bottomRightRange) < abs(topLeftRange - bottomLeftRange) and self.wall_parallelize == ""):
-            self.wall_parallelize = "Right"
-        elif(abs(topRightRange - bottomRightRange) > abs(topLeftRange - bottomLeftRange) and self.wall_parallelize == ""):
-            self.wall_parallelize = "Left"
-        if self.wall_parallelize == "Right":
-            if(abs(topRightRange - bottomRightRange) < self.parallelBuffer and middleRightRange <= min(topRightRange, bottomRightRange)): 
-                return True
-        else:
-            if(abs(topLeftRange - bottomLeftRange) < self.parallelBuffer and middleLeftRange <= min(topLeftRange, bottomLeftRange)):
-                return True
-        return False
     
     
 def main(args=None):
