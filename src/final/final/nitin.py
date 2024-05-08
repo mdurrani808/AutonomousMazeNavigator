@@ -36,8 +36,7 @@ class Homework5(Node):
         self.desired_turn_time = 30.0
         self.has_started = False
         self.parallelizing_time = 2.0
-        self.tolerance = 0.005
-        self.parallelizing_error = 0
+        self.tolerance = 0.0075
         self.max_parallelizing_effort = 1.0
         self.straight_after_right_time = 3.5
         self.left_counter = 0
@@ -45,6 +44,7 @@ class Homework5(Node):
         self.counter = 0
         self.wall_parallelize = ""
         self.hugging_right_wall=False
+        self.cleared_front_wall=False
 
 
         # !----- MODULAR VALUES -----! #
@@ -65,9 +65,11 @@ class Homework5(Node):
         self.RIGHT_FRONT = 285
         self.RIGHT_BACK = 255
 
+        self.parallelizing_error = 0.005
         self.RIGHT_SMALLER_PAR_RANGE = 10
+        self.CURR_PAR_RANGE = 10
         self.RIGHT_TURN_SIGNAL_ANGLE = 330
-        self.RIGHT_TURN_BUFFER = 0.1
+        self.RIGHT_TURN_BUFFER = 0.3
         self.parallelizing_direction = 0
         # !--------------------------! #
 
@@ -177,7 +179,6 @@ class Homework5(Node):
                 self.state = Motion_State.TURNING_RIGHT
                 self.partial_turned = False
                 self.counter = 0
-                print("TURNING RIGHT!")
 
             # otherwise, if there is a wall ahead of us, turn left.
             elif self.has_front(front):
@@ -201,29 +202,37 @@ class Homework5(Node):
             # turn until we have a wall in front at approx 45 degrees
 
             self.state = Motion_State.TURNING_RIGHT
-            print(right_signal_dist)
+                
 
-            # first move forwards a little bit
             if self.counter < 5:
                 self.state = Motion_State.STRAIGHT_NO_PARALLELIZING
                 self.front_target = right
+                if front < 1.5*self.FRONT_WALL_DIST:
+                    self.cleared_front_wall = False
 
             # next turn until we get a wall reading at the given "signal" distance
             # also check that we haven't finished partial turning already
-            elif ((right_signal_dist > 1.5*self.FRONT_WALL_DIST or abs(front - self.front_target) > self.RIGHT_TURN_BUFFER) 
+
+            # if we had a front wall at the beginning of the turn, we must check to see that
+            # we have turned past the wall before stopping our turn
+            elif ((right_signal_dist > 1.5*self.FRONT_WALL_DIST or not self.cleared_front_wall) 
                   and not self.partial_turned):
-                print("spin right partially!")
-                print(self.front_target)
                 self.state = Motion_State.TURNING_RIGHT
+
+                # once we have turned so that the front and right no longer point to a wall,
+                # set the cleared_front_wall variable to true
+                if not self.cleared_front_wall and front >= 1.5*self.FRONT_WALL_DIST:
+                    self.cleared_front_wall = True
 
             # next, move straight until we can parallelize the bot to the wall. Also, set the signal
             # for partial turning to true, so we do not try to partial turn again.
-            elif (right_back_dist > 1.5*self.FRONT_WALL_DIST):
+            elif (right > 1.5*self.FRONT_WALL_DIST) and self.cleared_front_wall:
                 print("straight, no parallelize!")
                 self.partial_turned = True
                 self.state = Motion_State.STRAIGHT_NO_PARALLELIZING
 
             else:
+                self.counter = 0
                 self.current_action = Actions.PARALLELIZE
                 self.state = Motion_State.PARALLELIZING
             
@@ -236,12 +245,26 @@ class Homework5(Node):
             # we don't necessarily know the same about right_front, so
             # we take a set of closer lines to parallelize off of, to be safe
 
-            front_line = self.get_dist_at_angle(self.RIGHT + self.RIGHT_SMALLER_PAR_RANGE, 1)
-            back_line = self.get_dist_at_angle(self.RIGHT - self.RIGHT_SMALLER_PAR_RANGE, 1)
+            if self.counter <= 1:
+                self.CURR_PAR_RANGE = self.RIGHT_SMALLER_PAR_RANGE
+
+            
+            front_angle = self.RIGHT + self.CURR_PAR_RANGE
+            back_angle = self.RIGHT - self.CURR_PAR_RANGE
+
+            front_line = self.get_dist_at_angle(front_angle, 1)
+            back_line = self.get_dist_at_angle(back_angle, 1)
+
+            if front_line > 1.5*self.MAX_RIGHT_WALL_DIST or back_line > 1.5*self.MAX_RIGHT_WALL_DIST and self.CURR_PAR_RANGE > 1:
+                self.CURR_PAR_RANGE -= 1
 
             smaller_par_err = front_line - back_line
+            print("front_line angle: " + str(front_angle) + ", front_line dist: " + str(front_line))
+            print("back_line angle: " + str(back_angle) + ", back_line dist: " + str(back_line))
+            print(smaller_par_err)
+            print("----------------------------------------\n")
 
-            if abs(smaller_par_err) < self.parallelBuffer:
+            if abs(smaller_par_err) > self.parallelizing_error:
                 self.parallelizing_direction = 2*smaller_par_err
             else:
                 self.parallelizing_direction = 0
@@ -286,7 +309,7 @@ class Homework5(Node):
 
     def timer_callback(self):
         LINEAR = .25
-        ANGULAR = .2
+        ANGULAR = .3
         msg = Twist()
                 
         if self.state == Motion_State.STRAIGHT:
