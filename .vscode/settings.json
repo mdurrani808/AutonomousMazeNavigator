@@ -11,5 +11,17 @@
         "/opt/ros/humble/lib/python3.10/site-packages",
         "/opt/ros/humble/local/lib/python3.10/dist-packages"
     ],
-    "ros.distro": "humble"
+    "ros.distro": "humble",
+    "python.analysis.extraPaths": [
+        "/home/mdurrani/ROS/final_project/ENAE450_FinalProject/build/final",
+        "/home/mdurrani/ROS/final_project/ENAE450_FinalProject/install/final/lib/python3.10/site-packages",
+        "/home/mdurrani/ROS/tb3_ws/build/turtlebot3_teleop",
+        "/home/mdurrani/ROS/tb3_ws/install/turtlebot3_teleop/lib/python3.10/site-packages",
+        "/home/mdurrani/ROS/tb3_ws/build/turtlebot3_example",
+        "/home/mdurrani/ROS/tb3_ws/install/turtlebot3_example/lib/python3.10/site-packages",
+        "/home/mdurrani/ROS/tb3_ws/install/turtlebot3_msgs/local/lib/python3.10/dist-packages",
+        "/home/mdurrani/ROS/tb3_ws/install/dynamixel_sdk_custom_interfaces/local/lib/python3.10/dist-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ]
 }
