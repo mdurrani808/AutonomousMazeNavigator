@@ -51,7 +51,7 @@ class Homework5(Node):
         self.FRONT_WALL_DIST = .45
 
         self.MIN_RIGHT_WALL_DIST = 0.3
-        self.MAX_RIGHT_WALL_DIST = 0.5
+        self.MAX_RIGHT_WALL_DIST = 0.4
 
         self.FRONT = 0
         self.LEFT = 90
@@ -64,6 +64,7 @@ class Homework5(Node):
         self.RIGHT_FRONT = 285
         self.RIGHT_BACK = 255
         self.RIGHT_TURN_SIGNAL_ANGLE = 330
+        self.RIGHT_TURN_BUFFER = 0.1
         self.parallelizing_direction = 0
         # !--------------------------! #
 
@@ -202,20 +203,27 @@ class Homework5(Node):
             # first move forwards a little bit
             if self.counter < 5:
                 self.state = Motion_State.STRAIGHT_NO_PARALLELIZING
+                self.front_target = right
 
             # next turn until we get a wall reading at the given "signal" distance
             # also check that we haven't finished partial turning already
-            elif (right_signal_dist > 1.5*self.FRONT_WALL_DIST) and not self.partial_turned:
+            elif ((right_signal_dist > 1.5*self.FRONT_WALL_DIST or abs(front - self.front_target) > self.RIGHT_TURN_BUFFER) 
+                  and not self.partial_turned):
                 print("spin right partially!")
+                print(self.front_target)
                 self.state = Motion_State.TURNING_RIGHT
 
             # next, move straight until we can parallelize the bot to the wall. Also, set the signal
             # for partial turning to true, so we do not try to partial turn again.
             elif (right_back_dist > 1.5*self.FRONT_WALL_DIST):
+                print("straight, no parallelize!")
                 self.partial_turned = True
                 self.state = Motion_State.STRAIGHT_NO_PARALLELIZING
 
-            # finally, parallelize the robot
+            # parallelize the robot to this wall, then finally move straight
+            elif :# not parallel!
+                # TODO
+
             else:
                 self.current_action = Actions.STRAIGHT
                 self.state = Motion_State.STRAIGHT
