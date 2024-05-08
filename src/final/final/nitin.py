@@ -16,10 +16,11 @@ class Motion_State(Enum):
     SPINNING: int = 6
 
 class Actions(Enum):
-    STRAIGHT: int = 0
-    RIGHT_TURN: int = 1
-    LEFT_TURN: int = 2
-    SPIN: int = 3
+    STRAIGHT: int = 0,
+    RIGHT_TURN: int = 1,
+    LEFT_TURN: int = 2,
+    SPIN: int = 3,
+    PARALLELIZE: int = 4
 
 class Homework5(Node):
     def __init__(self):
@@ -63,6 +64,8 @@ class Homework5(Node):
 
         self.RIGHT_FRONT = 285
         self.RIGHT_BACK = 255
+
+        self.RIGHT_SMALLER_PAR_RANGE = 10
         self.RIGHT_TURN_SIGNAL_ANGLE = 330
         self.RIGHT_TURN_BUFFER = 0.1
         self.parallelizing_direction = 0
@@ -190,9 +193,9 @@ class Homework5(Node):
 
 
             if abs(parallel_error) < self.parallelBuffer and right < right_front_dist and self.counter > 5:
-                self.current_action = Actions.STRAIGHT
-                self.state = Motion_State.STRAIGHT
-                print("transitioning to STRAIGHT state")
+                self.current_action = Actions.PARALLELIZE
+                self.state = Motion_State.PARALLELIZING
+                print("transitioning to PARALLELIZING state")
 
         elif self.current_action == Actions.RIGHT_TURN:
             # turn until we have a wall in front at approx 45 degrees
@@ -220,11 +223,29 @@ class Homework5(Node):
                 self.partial_turned = True
                 self.state = Motion_State.STRAIGHT_NO_PARALLELIZING
 
-            # parallelize the robot to this wall, then finally move straight
-            elif :# not parallel!
-                # TODO
-
             else:
+                self.current_action = Actions.PARALLELIZE
+                self.state = Motion_State.PARALLELIZING
+            
+        elif self.current_action == Actions.PARALLELIZE:
+            # use a closer set of 2 lines to parallelize.
+            # assumes we will not be in a corner situation
+            # we use a closer set since if we have just made a right turn
+            # to trace a thin wall, while the right turn action guarantees
+            # right_back is at this wall before starting this action,
+            # we don't necessarily know the same about right_front, so
+            # we take a set of closer lines to parallelize off of, to be safe
+
+            front_line = self.get_dist_at_angle(self.RIGHT + self.RIGHT_SMALLER_PAR_RANGE, 1)
+            back_line = self.get_dist_at_angle(self.RIGHT - self.RIGHT_SMALLER_PAR_RANGE, 1)
+
+            smaller_par_err = front_line - back_line
+
+            if abs(smaller_par_err) < self.parallelBuffer:
+                self.parallelizing_direction = 2*smaller_par_err
+            else:
+                self.parallelizing_direction = 0
+                print("finished parallelizing!")
                 self.current_action = Actions.STRAIGHT
                 self.state = Motion_State.STRAIGHT
 
@@ -282,6 +303,8 @@ class Homework5(Node):
             msg.linear.x = LINEAR
         elif self.state == Motion_State.SPINNING:
             msg.angular.z = ANGULAR * 4
+        elif self.state == Motion_State.PARALLELIZING:
+            msg.angular.z = self.parallelizing_direction * (-ANGULAR)
         
         self.publisher.publish(msg)
         
