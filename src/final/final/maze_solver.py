@@ -22,7 +22,7 @@ class WallFollowerVFinal(Node):
         self.timer = self.create_timer(0.02, self.timer_callback)
         
         
-        self.gazebo = True
+        self.gazebo = False
         self.tuning = False
         self.enable_logging = False
         self.got_first_message = False
