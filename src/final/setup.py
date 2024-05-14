@@ -29,7 +29,7 @@ setup(
     entry_points={
         'console_scripts': [
             'maze_solver = final.maze_solver:main',
-            'nitin_code = final.nitin:main'
+            'final_maze_solver = final.final_maze_solver:main'
         ],
     },
 )
