@@ -8,6 +8,7 @@ import math
 
 class States(Enum):
     TURN_RIGHT: int = 1,
+    STRAIGHT_SPECIAL: int = 6,
     STRAIGHT: int = 2,
     TURN_LEFT: int = 3,
     PARALLELIZE: int = 4,
@@ -22,17 +23,18 @@ class WallFollowerVFinal(Node):
         self.timer = self.create_timer(0.02, self.timer_callback)
         
         
-        self.gazebo = True
+        self.gazebo = False
         self.tuning = False
         self.enable_logging = False
         self.got_first_message = False
         self.has_started = False # starting is defined as seeing our first wall in front of us. 
         #sets the 1/2 the angle we use to calculate a certain distance (ex. theta = 10 means we will use the average of a 20 degree range to calculate the angle)
         self.theta = int(10)
-        self.desired_turn_time = 4.75
+        self.desired_turn_time = 3.5
+        self.straight_after_right = 4.0
         self.parallelizing_error = 0.0
-        self.parallelBuffer = 0.001
-        self.kp = 50.0
+        self.parallelBuffer = 0.0001
+        self.kp = 100.0
         
         self.elapsed_time = 0.0
         self.last_time = 0.0
@@ -64,7 +66,7 @@ class WallFollowerVFinal(Node):
             self.front = 360
             self.right_orth = 180
             self.right_front = 270
-            self.right_back = 150
+            self.right_back = 140
             
             # angles used while parallelizing
             self.right_front_parallel_angle = 160
@@ -78,7 +80,7 @@ class WallFollowerVFinal(Node):
             self.min_front_dist = .5
             self.min_right_orth_dist = 0.6
             self.min_right_front_dist = 0.5
-            self.min_right_back_dist = 1.05
+            self.min_right_back_dist = 2.05
             
             self.linear = .5
             self.angular = 0.5
@@ -108,6 +110,10 @@ class WallFollowerVFinal(Node):
     def update_ranges(self, scan_msg):
         self.got_first_message = True
         lidar_data = scan_msg.ranges
+        #self.print(str((self.curr_right_back_dist > 2.75 and not (self.var_has_right_orth or self.var_has_right_front))))
+        #self.print("greater than 2.75"+str(self.curr_right_back_dist > 2.75))
+        #self.print("other jawn"+str(not (self.var_has_right_orth or self.var_has_right_front)))
+        #self.print("third jawn" +str(self.curr_right_back_dist))
         # calculate all of the relevant distances using the scan_msg from the lidar
         self.curr_front_dist = lidar_data[self.front]
         self.curr_right_orth_dist = self.mean(lidar_data[self.right_orth - self.theta : self.right_orth + self.theta])
@@ -120,7 +126,6 @@ class WallFollowerVFinal(Node):
         
         left_front_parallel = self.mean(lidar_data[self.left_front_parallel_angle - self.parallel_theta:self.left_front_parallel_angle + self.parallel_theta])
         left_back_parallel = self.mean(lidar_data[self.left_back_parallel_angle - self.parallel_theta:self.left_back_parallel_angle + self.parallel_theta])
-        
         
         #cache the last state (to allow us to check for state transitions)
         self.last_state = self.state
@@ -142,7 +147,7 @@ class WallFollowerVFinal(Node):
         self.var_has_right_back = self.has_right_back()
         if self.has_started:
             
-            if(self.state != States.TURN_LEFT and self.state != States.TURN_RIGHT):
+            if(self.state != States.TURN_LEFT and self.state != States.TURN_RIGHT and self.state != States.STRAIGHT_SPECIAL):
                 self.elapsed_time = 0
                 # if we are parallelizing, calculate the error and then check if we are done yet.
                                 # We just need to continue against a wall if the wall does exist. 
@@ -162,6 +167,9 @@ class WallFollowerVFinal(Node):
                         self.get_logger().info(f"Transitioning from {self.last_state} to {self.state} because parallel")
                 
                 # this means are are at a corner, we need to turn left to follow the wall
+                elif(self.curr_right_back_dist > .70 and not (self.var_has_right_orth or self.var_has_right_front)):
+                    self.state = States.TURN_RIGHT
+                    self.last_turn_state = States.TURN_RIGHT
                 elif(self.var_has_front and self.var_has_right_orth):
                     self.state = States.TURN_LEFT
                     self.last_turn_state = States.TURN_LEFT
@@ -170,12 +178,13 @@ class WallFollowerVFinal(Node):
                     self.state = States.STRAIGHT
                     
                 # if there is soemthing in the right back (we have passed a wall) and nothing in the front, we need to turn right to follow the outside corner
-                elif(self.var_has_right_back and not (self.var_has_right_orth or self.var_has_right_front) and self.curr_right_orth_dist > self.curr_right_back_dist and self.curr_right_back_dist > .55):
-                    self.state = States.TURN_RIGHT
-                    self.last_turn_state = States.TURN_RIGHT
+                
                 # something went wrong and we don't know what state we are in! fuck it go right
                 else:
-                    self.state = States.STRAIGHT
+                    self.print("fuck")
+                    self.state = self.last_state
+                    if(self.curr_right_back_dist > 3.0 and not self.var_has_right_orth and not self.var_has_right_front):
+                        self.state = States.TURN_RIGHT
         else:
             if self.has_front():
                 self.has_started = True
@@ -211,17 +220,23 @@ class WallFollowerVFinal(Node):
             if self.last_state == States.STRAIGHT and (self.state == States.TURN_LEFT or self.state == States.TURN_RIGHT):
                 self.elapsed_time = 0
                 self.print("START TURNING")
-            
+            if(self.state == States.STRAIGHT_SPECIAL and self.elapsed_time >= self.straight_after_right):
+                self.print("DONE WITH START SPECIAL")
+                self.state = States.TURN_RIGHT
             # if the are turning and the timer has passed, start parallelizing
             if (self.state == States.TURN_LEFT or self.state == States.TURN_RIGHT) and self.elapsed_time >= self.desired_turn_time:
-                self.state = States.PARALLELIZE
+                if(self.state == States.TURN_LEFT):
+                    self.state = States.PARALLELIZE
+                else:
+                    self.state = States.STRAIGHT_SPECIAL
+                    self.elapsed_time = 0
                 self.print("PARALLELIZING")
             
             if self.state == States.UNKNOWN:
                 self.state = self.last_state
             
             # go straight at the start or if we state is straight, go straight
-            if not self.has_started or self.state == States.STRAIGHT:
+            if not self.has_started or (self.state == States.STRAIGHT or self.state == States.STRAIGHT_SPECIAL):
                 msg.linear.x = LINEAR
                 msg.angular.z = 0.0
             elif self.state == States.TURN_LEFT:
@@ -229,7 +244,10 @@ class WallFollowerVFinal(Node):
             elif self.state == States.TURN_RIGHT:
                 msg.angular.z = -ANGULAR
             elif self.state == States.PARALLELIZE:
-                msg.angular.z = self.parallel_angular * self.sign(self.parallelizing_error) * abs(self.parallelizing_error * self.kp)
+                if(self.sign(self.parallelizing_error) == -1):
+                    msg.angular.z = min(self.parallel_angular * self.sign(self.parallelizing_error) * abs(self.parallelizing_error * self.kp), -.0075)
+                else:
+                    msg.angular.z = max(self.parallel_angular * self.sign(self.parallelizing_error) * abs(self.parallelizing_error * self.kp), .0075)
 
             self.publisher.publish(msg)
             

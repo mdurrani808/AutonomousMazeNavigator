@@ -29,7 +29,8 @@ setup(
     entry_points={
         'console_scripts': [
             'maze_solver = final.maze_solver:main',
-            'final_maze_solver = final.final_maze_solver:main'
+            'final_maze_solver = final.final_maze_solver:main',
+            'my_calc_node = final.my_calc_node:main'
         ],
     },
 )
