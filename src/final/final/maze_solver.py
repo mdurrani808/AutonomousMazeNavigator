@@ -22,17 +22,17 @@ class WallFollowerVFinal(Node):
         self.timer = self.create_timer(0.02, self.timer_callback)
         
         
-        self.gazebo = False
+        self.gazebo = True
         self.tuning = False
         self.enable_logging = False
         self.got_first_message = False
         self.has_started = False # starting is defined as seeing our first wall in front of us. 
         #sets the 1/2 the angle we use to calculate a certain distance (ex. theta = 10 means we will use the average of a 20 degree range to calculate the angle)
         self.theta = int(10)
-        self.desired_turn_time = 3.5
+        self.desired_turn_time = 4.75
         self.parallelizing_error = 0.0
         self.parallelBuffer = 0.001
-        
+        self.kp = 50.0
         
         self.elapsed_time = 0.0
         self.last_time = 0.0
@@ -49,7 +49,7 @@ class WallFollowerVFinal(Node):
             
             self.left_front_parallel_angle = 105
             self.left_back_parallel_angle = 75
-            self.parallel_theta = int(10.0)
+            self.parallel_theta = int(5.0)
             
             # This sets the distance we use to check whether or not there is "something" within that range
             self.min_front_dist = 0.70
@@ -57,7 +57,7 @@ class WallFollowerVFinal(Node):
             self.min_right_front_dist = 0.6
             self.min_right_back_dist = 1.05
             
-            self.linear = 0.5
+            self.linear = .5
             self.angular = 0.5
             self.parallel_angular = 0.075
         else:
@@ -151,17 +151,13 @@ class WallFollowerVFinal(Node):
                     
                     # if we just turned left or the left wall is too far away, we parallelize off the right wall.
                     if (self.last_turn_state == States.TURN_LEFT) or left_front_parallel > right_front_parallel:
-                        self.print("RIGHT")
                         self.parallelizing_error = right_front_parallel-right_back_parallel
                     
                     # otherwise, use the left wall (the order is flipped so the sign matches that of the right error as needed)
                     else:
-                        self.print("left")
                         self.parallelizing_error = left_back_parallel-left_front_parallel
 
-                    self.print(str(self.parallelizing_error))
                     if abs(self.parallelizing_error) < self.parallelBuffer:
-                        self.stopTurtleBot()
                         self.state = States.STRAIGHT
                         self.get_logger().info(f"Transitioning from {self.last_state} to {self.state} because parallel")
                 
@@ -191,7 +187,6 @@ class WallFollowerVFinal(Node):
         LINEAR = self.linear
         ANGULAR = self.angular
         msg = Twist()
-        self.print(f"{self.curr_right_back_dist}")
         # print logging messages on every state transition or variable change
         if(self.enable_logging and self.got_first_message):
             if(self.last_state != self.state):
@@ -228,12 +223,13 @@ class WallFollowerVFinal(Node):
             # go straight at the start or if we state is straight, go straight
             if not self.has_started or self.state == States.STRAIGHT:
                 msg.linear.x = LINEAR
+                msg.angular.z = 0.0
             elif self.state == States.TURN_LEFT:
                 msg.angular.z = ANGULAR
             elif self.state == States.TURN_RIGHT:
                 msg.angular.z = -ANGULAR
             elif self.state == States.PARALLELIZE:
-                msg.angular.z = self.parallel_angular * self.sign(self.parallelizing_error)
+                msg.angular.z = self.parallel_angular * self.sign(self.parallelizing_error) * abs(self.parallelizing_error * self.kp)
 
             self.publisher.publish(msg)
             

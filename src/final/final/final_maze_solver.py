@@ -45,32 +45,59 @@ class Homework5(Node):
         self.wall_parallelize = ""
         self.hugging_right_wall=False
         self.cleared_front_wall=False
+        self.gazebo = True
 
 
         # !----- MODULAR VALUES -----! #
-        self.angle_range = 3
-        self.FRONT_WALL_DIST = .45
+        
+        if(self.gazebo):
+            self.angle_range = 3
+            self.FRONT_WALL_DIST = .45
 
-        self.MIN_RIGHT_WALL_DIST = 0.3
-        self.MAX_RIGHT_WALL_DIST = 0.4
+            self.MIN_RIGHT_WALL_DIST = 0.3
+            self.MAX_RIGHT_WALL_DIST = 0.4
 
-        self.FRONT = 0
-        self.LEFT = 90
-        self.RIGHT = 270
-        self.THETA = 10
-        self.parallelBuffer = 0.01
-        self.RANGE_MIN_IND = 0
-        self.RANGE_MAX_IND = 360
+            self.FRONT = 0
+            self.LEFT = 90
+            self.RIGHT = 270
+            self.THETA = 10
+            self.parallelBuffer = 0.01
+            self.RANGE_MIN_IND = 0
+            self.RANGE_MAX_IND = 360
 
-        self.RIGHT_FRONT = 285
-        self.RIGHT_BACK = 255
+            self.RIGHT_FRONT = 285
+            self.RIGHT_BACK = 255
 
-        self.parallelizing_error = 0.005
-        self.RIGHT_SMALLER_PAR_RANGE = 10
-        self.CURR_PAR_RANGE = 10
-        self.RIGHT_TURN_SIGNAL_ANGLE = 330
-        self.RIGHT_TURN_BUFFER = 0.3
-        self.parallelizing_direction = 0
+            self.parallelizing_error = 0.005
+            self.RIGHT_SMALLER_PAR_RANGE = 10
+            self.CURR_PAR_RANGE = 10
+            self.RIGHT_TURN_SIGNAL_ANGLE = 330
+            self.RIGHT_TURN_BUFFER = 0.3
+            self.parallelizing_direction = 0
+        else:
+            self.angle_range = 3
+            self.FRONT_WALL_DIST = .45
+
+            self.MIN_RIGHT_WALL_DIST = 0.3
+            self.MAX_RIGHT_WALL_DIST = 0.4
+
+            self.FRONT = 360
+            self.LEFT = 540
+            self.RIGHT = 180
+            self.THETA = 10
+            self.parallelBuffer = 0.01
+            self.RANGE_MIN_IND = 0
+            self.RANGE_MAX_IND = 360
+
+            self.RIGHT_FRONT = 200 # was 285
+            self.RIGHT_BACK = 160
+
+            self.parallelizing_error = 0.005
+            self.RIGHT_SMALLER_PAR_RANGE = 10
+            self.CURR_PAR_RANGE = 10
+            self.RIGHT_TURN_SIGNAL_ANGLE = 240 # was 330
+            self.RIGHT_TURN_BUFFER = 0.3
+            self.parallelizing_direction = 0
         # !--------------------------! #
 
         
