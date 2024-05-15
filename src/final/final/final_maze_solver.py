@@ -25,7 +25,7 @@ class Actions(Enum):
 class Homework5(Node):
     def __init__(self):
         super().__init__('hw5_pub')
-
+        
         self.state = Motion_State.STRAIGHT
         self.last_state = Motion_State.STRAIGHT
         self.current_action = Actions.STRAIGHT
@@ -45,7 +45,11 @@ class Homework5(Node):
         self.wall_parallelize = ""
         self.hugging_right_wall=False
         self.cleared_front_wall=True
+
+
+        # MODULAR FLAGS
         self.gazebo = False
+        self.finishable = True
 
 
         # !----- MODULAR VALUES -----! #
@@ -75,11 +79,13 @@ class Homework5(Node):
             self.RIGHT_TURN_BUFFER = 0.3
             self.parallelizing_direction = 0
         else:
-            self.angle_range = 6
+            self.angle_range = 10
             self.FRONT_WALL_DIST = 0.35
 
-            self.MIN_RIGHT_WALL_DIST = 0.27
+            self.MIN_RIGHT_WALL_DIST = 0.20
             self.MAX_RIGHT_WALL_DIST = 0.40
+
+            self.RIGHT_TURN_THRESHOLD = 0.50
 
             self.FRONT = 360
             self.LEFT = 540
@@ -89,43 +95,31 @@ class Homework5(Node):
             self.RANGE_MIN_IND = 0
             self.RANGE_MAX_IND = 720
 
+            self.FRONT_RIGHT = 330
+
             self.RIGHT_FRONT = 200 # was 285
             self.RIGHT_BACK = 160
 
             self.parallelizing_error = 0.008
             self.RIGHT_SMALLER_PAR_RANGE = 10
             self.CURR_PAR_RANGE = 10
-            self.RIGHT_TURN_SIGNAL_ANGLE = 300 # was 330
+            self.RIGHT_TURN_SIGNAL_ANGLE = 290 # was 330
             self.RIGHT_TURN_BUFFER = 0.3
             self.parallelizing_direction = 0
 
-            self.RIGHT_TURN_STRAIGHT_COUNT = 13
+            self.RIGHT_TURN_STRAIGHT_COUNT = 15
         # !--------------------------! #
 
         
         self.publisher = self.create_publisher(Twist, "/cmd_vel", 100)
         self.pose_sub = self.create_subscription(LaserScan, "/scan", self.update_ranges, 100)
         self.timer = self.create_timer(0.01, self.timer_callback)
-        
-    def has_right(self, right_dist, top_right_dist, bottom_right_dist):
-        return right_dist < self.RIGHT_WALL_DIST or bottom_right_dist < self.LONG_RIGHT_WALL_DIST
-    def has_left(self, left_dist, top_left_dist, bottom_left_dist):
-        return left_dist < self.RIGHT_WALL_DIST or bottom_left_dist < self.LONG_RIGHT_WALL_DIST
-    
 
-    def has_front(self, front_dist):
-        return front_dist < self.FRONT_WALL_DIST
-    
-    def is_parallel(self, topRightRange, bottomRightRange, middleRightRange, topLeftRange, bottomLeftRange, middleLeftRange):
-        if(abs(topRightRange - bottomRightRange) < abs(topLeftRange - bottomLeftRange) and self.wall_parallelize == ""):
-            self.wall_parallelize = "Right"
-        elif(abs(topRightRange - bottomRightRange) > abs(topLeftRange - bottomLeftRange) and self.wall_parallelize == ""):
-            self.wall_parallelize = "Left"
-        if(abs(topRightRange - bottomRightRange) < self.parallelBuffer and middleRightRange <= min(topRightRange, bottomRightRange)): 
-            return True
-        elif(abs(topLeftRange - bottomLeftRange) < self.parallelBuffer and middleLeftRange <= min(topLeftRange, bottomLeftRange)):
-            return True
-        return False
+    def has_front(self, front_dist, threshold_dist = None):
+        if not threshold_dist:
+            threshold_dist = self.FRONT_WALL_DIST
+        
+        return front_dist < threshold_dist
     
     def mean(self, arr):
         arr = [i for i in arr if i <= 1.5]
@@ -146,6 +140,7 @@ class Homework5(Node):
         right_back_dist = self.get_dist_at_angle(self.RIGHT_BACK, range_size=5)
         parallel_error = right_front_dist - right_back_dist
         right_signal_dist = self.get_dist_at_angle(self.RIGHT_TURN_SIGNAL_ANGLE)
+        front_right = self.get_dist_at_angle(self.FRONT_RIGHT, range_size=3)
         
 
         
@@ -165,28 +160,21 @@ class Homework5(Node):
                 self.current_action = Actions.STRAIGHT
                 self.state = Motion_State.STRAIGHT
             else:
-                print("turning left!!")
-                self.current_action = Actions.LEFT_TURN
-                self.state = Motion_State.TURNING_LEFT
-                self.counter = 0
+                self.execute_action(Actions.LEFT_TURN)
                 self.hugging_right_wall = True
 
+        # IF WE ARE CURRENTLY MOVING STRAIGHT
         elif self.current_action == Actions.STRAIGHT:
             # once we know we are hugging the right wall and going straight, keep parallel to
             # the right wall.
             self.state = Motion_State.STRAIGHT
 
-            self.get_logger().info("front dist: " + str(front))
-            print("right dist: " + str(right))
-            print("right front: " + str(right_front_dist))
-            print("left dist: " + str(left))
-
-            print("front:")
-            print(self.get_angle_range(self.FRONT, range_size=15))
-
-
             # if our right_front distance ever becomes greater than front_wall_dist + some buffer,
             # we want to parallelize right so that we go closer to the wall, then continue parallelizing
+
+            print("right distance: " + str(right))
+            print("right_front_dist: " + str(right_front_dist))
+
             if right_front_dist > self.MAX_RIGHT_WALL_DIST:
                 print("moving to right wall!")
                 self.parallelizing_direction = 1
@@ -197,11 +185,6 @@ class Homework5(Node):
 
             # this will cover the normal parallelizing case, where we are next to a wall, but not too far
             elif abs(parallel_error) > self.parallelBuffer:
-                #print("parallel error: " + str(parallel_error))
-                #print("r_front: " + str(right_front_dist))
-                #print("r_back: " + str(right_back_dist))
-                #print("------------------------\n")
-
                 # if the parallelizing error is already large, we don't want to magnify it
                 # too much.
                 if parallel_error <= 1:
@@ -219,43 +202,33 @@ class Homework5(Node):
                 self.state = Motion_State.SPINNING
 
             # if we have an open right side, we should prioritize turning right.
-            elif right_front_dist > 3*self.FRONT_WALL_DIST:
-                self.current_action = Actions.RIGHT_TURN
-                self.state = Motion_State.TURNING_RIGHT
-                self.partial_turned = False
-                self.turned = False
-                self.counter = 0
+            elif right_front_dist > self.RIGHT_TURN_THRESHOLD:
+                self.execute_action(Actions.RIGHT_TURN)
+
 
             # otherwise, if there is a wall ahead of us, turn left.
-            elif self.has_front(front):
-                print("turning left")
-                self.current_action = Actions.LEFT_TURN
-                self.state = Motion_State.TURNING_LEFT
-                self.counter = 0
+            elif self.has_front(front) or self.has_front(front_right):
+                self.execute_action(Actions.LEFT_TURN)
 
+
+        # IF WE ARE CURRENTLY TURNING LEFT
         elif self.current_action == Actions.LEFT_TURN:
             # keep turning left until we are parallel to right wall.
             # if right_front and right_back are equal, but right is longer than both,
             # then we are turning a corner. So, keep turning.
             self.state = Motion_State.TURNING_LEFT
-
-
             if abs(parallel_error) < self.parallelBuffer and right < right_front_dist and self.counter > 5:
-                self.current_action = Actions.PARALLELIZE
-                self.state = Motion_State.PARALLELIZING
-                print("transitioning to PARALLELIZING state")
+                self.execute_action(Actions.STRAIGHT)
 
+
+        # IF WE ARE CURRENTLY TURNING RIGHT
         elif self.current_action == Actions.RIGHT_TURN:
+
             # turn until we have a wall in front at approx 45 degrees
-
             self.state = Motion_State.TURNING_RIGHT
-            #print("turning right")
-            #print("right_signal_dist: " + str(right_signal_dist))
-            #print("normal right: " + str(right))
-            #print("cleared front? " + str(self.cleared_front_wall))
 
-            if self.counter < self.RIGHT_TURN_STRAIGHT_COUNT and not self.turned:
-                print("beginning straight")
+            if self.counter < self.RIGHT_TURN_STRAIGHT_COUNT and not self.turned and not self.has_front(front):
+                print("counter straight")
                 self.state = Motion_State.STRAIGHT_NO_PARALLELIZING
                 self.front_target = right
                 if front < 1.5*self.FRONT_WALL_DIST:
@@ -268,7 +241,7 @@ class Homework5(Node):
             # we have turned past the wall before stopping our turn
             elif ((right_signal_dist > 1.5*self.FRONT_WALL_DIST or not self.cleared_front_wall) 
                   and not self.partial_turned):
-                print("right turning")
+                print("turning")
                 self.state = Motion_State.TURNING_RIGHT
                 self.turned = True
                 # once we have turned so that the front and right no longer point to a wall,
@@ -279,21 +252,15 @@ class Homework5(Node):
             # next, move straight until we can parallelize the bot to the wall. Also, set the signal
             # for partial turning to true, so we do not try to partial turn again.
             elif (right > 1.5*self.FRONT_WALL_DIST) and self.cleared_front_wall:
-                print("straight, no parallelize!\n\n")
                 self.partial_turned = True
                 self.state = Motion_State.STRAIGHT_NO_PARALLELIZING
                 self.counter = 0
-            
-            elif self.counter < 3:
-                self.state = Motion_State.STRAIGHT_NO_PARALLELIZING
-                print("found wall, now going straight twice \n\n\n\n")
 
             else:
                 #print("parallelizing!!\n\n\n----------------")
-                self.counter = 0
-                self.current_action = Actions.PARALLELIZE
-                self.state = Motion_State.PARALLELIZING
+                self.execute_action(Actions.STRAIGHT)
             
+        # WE ARE CURRENTLY PARALLELIZING TO A RIGHT WALL
         elif self.current_action == Actions.PARALLELIZE:
             # use a closer set of 2 lines to parallelize.
             # assumes we will not be in a corner situation
@@ -326,22 +293,55 @@ class Homework5(Node):
                 self.state = Motion_State.PARALLELIZING
                 self.parallelizing_direction = 10*smaller_par_err
             else:
-                self.parallelizing_direction = 0
-                print("finished parallelizing!")
-                self.current_action = Actions.STRAIGHT
+                self.execute_action(Actions.STRAIGHT)
+
+        elif self.current_action == Actions.SPIN:
+            if self.counter <= 10:
                 self.state = Motion_State.STRAIGHT
 
+            else:
+                self.state = Motion_State.SPINNING
 
             
 
-            
-            
-            
         
-        #if math.isinf(left) and math.isinf(right):
-            #self.state = Motion_State.SPINNING
-            #self.get_logger().info(f"Transitioning from {self.last_state} to {self.state} because we're done")
+        front_half = self.get_angle_range(360, range_size=180)
+        front_half = [i for i in front_half if i != math.inf]
+        print("number of non-infinite values: " + str(len(front_half)))
+        if len(front_half) < 270 and self.current_action != Actions.SPIN and self.finishable:
+            self.execute_action(Actions.SPIN)
             
+    def execute_action(self, action):
+        self.counter = 0
+
+        if action == Actions.LEFT_TURN:
+            self.get_logger().info("turn left!")
+            self.current_action = Actions.LEFT_TURN
+            self.state = Motion_State.TURNING_LEFT
+
+        elif action == Actions.RIGHT_TURN:
+            self.get_logger().info("turn right!")
+            self.current_action = Actions.RIGHT_TURN
+            self.state = Motion_State.TURNING_RIGHT
+            self.partial_turned = False
+            self.turned = False
+
+        elif action == Actions.STRAIGHT:
+            self.get_logger().info("go straight!")
+            self.parallelizing_direction = 0
+            self.current_action = Actions.STRAIGHT
+            self.state = Motion_State.STRAIGHT
+
+        elif action == Actions.PARALLELIZE:
+            self.get_logger().info("parallelize!")
+            self.current_action = Actions.PARALLELIZE
+            self.state = Motion_State.PARALLELIZING
+
+        elif action == Actions.SPIN:
+            self.get_logger().info("Finished!")
+            self.current_action = Actions.SPIN
+            self.state = Motion_State.STRAIGHT
+
    
     def get_angle_range(self, angle, range_size=None):
         range_arr = []
@@ -368,7 +368,7 @@ class Homework5(Node):
 
     def timer_callback(self):
         LINEAR = .15
-        ANGULAR = .3
+        ANGULAR = .5
         msg = Twist()
                 
         if self.state == Motion_State.STRAIGHT:
