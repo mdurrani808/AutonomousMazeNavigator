@@ -2,7 +2,7 @@ import os
 from glob import glob
 from setuptools import find_packages, setup
 
-package_name = 'final'
+package_name = 'maze_hardware'
 
 setup(
     name=package_name,
@@ -28,9 +28,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'maze_solver = final.maze_solver:main',
-            'final_maze_solver = final.final_maze_solver:main',
-            'my_calc_node = final.my_calc_node:main'
+            'final_maze_solver = maze_hardware.final_maze_solver:main',
         ],
     },
 )
